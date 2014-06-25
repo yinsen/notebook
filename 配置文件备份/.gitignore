@@ -1,0 +1,17 @@
+#java options
+*.class
+*.jar
+*.war
+*.ear
+
+# Android options
+*.apk
+*.ap_
+*.dex
+
+
+# generated files
+bin/
+gen/
+# Local configuration file (sdk path, etc)
+local.properties

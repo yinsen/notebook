@@ -1,0 +1,86 @@
+一、四大工具介绍：
+	1. apktool：用于从apk得到java源代码和图片、XML配置、语言资源等文件
+			下载地址：https://code.google.com/p/android-apktool/downloads/list
+	2. dex2jar.sh: 用于将dex文件转换成jar文件
+			下载地址：http://code.google.com/p/dex2jar/downloads/list
+	3. jd-gui：用于打开jar文件，查看java源码
+			下载地址：http://code.google.com/p/innlab/downloads/list
+	4. AXMLPrinter2.jar：用于反编译apktool打开的xml文件
+			java -jar AXMLPrinter2.jar AndroidManifest.xml >AndroidManifest_decode.xml
+
+二、使用proguard实现对代码的混淆，防止dex被反编译：
+	1. 将AndroidManifest.xml中的android:debuggable="true"改为"false"，这样就表示此app编译后不能在user mode下被调试运行
+			1）如何确认debuggable属性为false：
+			aapt list -v -a ***.apk |grep debuggable
+				得到如下输出：
+				A: android:debuggable(0x0101000f)=(type 0x12)0x0
+				这表示 android:debuggable="false" 
+				A: android:debuggable(0x0101000f)=(type 0x12)0xffffffff
+				这表示 android:debuggable="true" 
+				
+	2. 在eclipse工程中自动生成的default.properties文件中加入一行：
+				proguard.config=proguard.cfg 
+		 其中=后面的表示的是proguard.cfg的路径，如果是在project根目录下，则如上填写
+		 （如果是2.3之前的版本，则还需要手动拷贝proguard.cfg）
+	
+	3. release编译生成.apk文件：一种是Export,还有就是Android Tools->Export Signed 或 Android Tools->Export Unsigned
+	
+	号外：：先把.class打包成jar,然后调用proguard混淆，再用dx把混淆后的jar打包成dex
+
+
+
+三、检验能否被反编译：
+	1. 将apk(即zip文件)解压得到dex文件
+	2. 用命令   dex2jar.sh ***.dex [输出文件夹]    或    dex2jar.bat ***.dex   将dex转换成jar文件，生成 ***_dex2jar.jar
+	3. jd-gui打开***_dex2jar.jar，就可以得到java源代码
+	
+	
+	
+四、使用apktool实现对APK的注入：
+	1. 执行apktool文件夹中sh脚本    apktool d -f ***.apk [输出文件夹]       得到所有解包出来的文件
+
+	2. 对解包后的APK文件夹进行注入：
+		1） 修改AndroidManifest.xml文件：
+		 	  根据需要修改文件的Activity，Receiver，Service三大组件、程序入口点、权限声明
+		2）修改smali,将新代码的smali注入到目标代码的smali（即将整个com.文件夹拷贝过去，与AndroidManifest.xml中的名字路径要对应）
+		3）注入的代码可以根据系统漏洞提升自身权限（可选项）
+		
+	3. 将注入后的文件重新打包成apk，只需输入    apktool b [输出文件夹]    即可；会在 [输出文件夹] 目录下生成build、dist两个文件夹，其中，新打包的apk文件在dist文件夹下
+
+	4. 签名：
+		1）使用jdk自带的工具keytool生成keystore(签名文件)
+			a）keytool -genkey -keyalg RSA -validity 20000 -keystore yskey.keystore -alias ysalias.keystore
+				-keyalg 是加密方式这里是RSA
+				-validity 是有效期，单位为天
+				-keystore 就是要生成的keystore的名称 这里是yskey.keystore
+				-alias 后面跟的是别名这里是 ysalias.store
+			b）提示输入密码，这个密码需要在签名时使用，必须记住，最高级；
+			c）提示输入其它信息
+			
+		2）jarsigner签名，使用签名文件*.keystore进行签名。语法格式为：jarsigner [ options ] jar-file alias
+																													jarsigner -verify [ options ] jar-file 
+
+			a）jarsigner -keystore yskey.keystore -signedjar [***_signed.apk] ***.apk ysalias.keystore
+				-verbose 表示输出详细信息
+				-keystore: keystore的名称
+				***_signed.apk: 签名后的APK，如果省略，则表示签名后的文件直接覆盖原***.apk文件
+				***.apk: 签名前的APK
+							
+			b）验证签名：
+				jarsigner -verify -verbose -certs ***.apk
+				
+				
+	5. 优化签名后的apk文件：
+		
+				a）zipalign -v 4 ***.apk ***_optimize.apk
+					4表示4字节对齐，必须有且必须为4
+					
+				查循APK是否优化过：
+				b）zipalign -c -v 4 ***_optimize.apk
+
+
+
+	
+	
+	
+	

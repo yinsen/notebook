@@ -1,0 +1,85 @@
+# /etc/profile
+
+# System wide environment and startup programs, for login setup
+# Functions and aliases go in /etc/bashrc
+
+pathmunge () {
+	if ! echo $PATH | /bin/egrep -q "(^|:)$1($|:)" ; then
+	   if [ "$2" = "after" ] ; then
+	      PATH=$PATH:$1
+	   else
+	      PATH=$1:$PATH
+	   fi
+	fi
+}
+
+# ksh workaround
+if [ -z "$EUID" -a -x /usr/bin/id ]; then 
+	EUID=`id -u`
+	UID=`id -ru`
+fi
+
+# Path manipulation
+if [ "$EUID" = "0" ]; then
+	pathmunge /sbin
+	pathmunge /usr/sbin
+	pathmunge /usr/local/sbin
+fi
+
+# No core files by default
+ulimit -S -c 0 > /dev/null 2>&1
+
+if [ -x /usr/bin/id ]; then
+	USER="`id -un`"
+	LOGNAME=$USER
+	MAIL="/var/spool/mail/$USER"
+fi
+
+HOSTNAME=`/bin/hostname`
+HISTSIZE=1000
+
+if [ -z "$INPUTRC" -a ! -f "$HOME/.inputrc" ]; then
+    INPUTRC=/etc/inputrc
+fi
+
+export PATH USER LOGNAME MAIL HOSTNAME HISTSIZE INPUTRC
+
+for i in /etc/profile.d/*.sh ; do
+    if [ -r "$i" ]; then
+        if [ "$PS1" ]; then
+            . $i
+        else
+            . $i >/dev/null 2>&1
+        fi
+    fi
+done
+
+unset i
+unset pathmunge
+
+export HOME="/dds"
+export DDS_HOME="$HOME/dds"
+export OLS_HOME="$HOME/OpenLS"
+export SERVER_HOME="$OLS_HOME/server/hsqldb"
+
+export INSTALL_DIR="/home/bin"
+export JAVA_HOME="$INSTALL_DIR/jdk"
+export JRE_HOME="$JAVA_HOME/jre"
+export CLASSPATH="$CLASSPATH:$JAVA_HOME/lib:$JAVA_HOME/jre/lib"
+export PATH="$JAVA_HOME/bin:$JAVA_HOME/jre/bin:$PATH"
+export LD_LIBRARY_PATH=/dds/dds/lib:$LD_LIBRARY_PATH
+
+export CATALINA_HOME="$OLS_HOME/server/Tomcat"
+export CATALINA_BASE="$OLS_HOME/server/Tomcat"
+export CATALINA_OPTS="-Denvironment=local -Xms720m -Xmx720m -XX:MaxPermSize=384m"
+
+# by lake##/usr/local/dds_4.3.3/Web\ Services/server/Tomcat\ 5.0/bin/startup.sh
+# by lake##cd /usr/local/dds_4.3.3/DrillDownServer/bin
+# by lake##nohup ./ddserver -cfg ddserver.cfg &
+
+export ANT_HOME="$INSTALL_DIR/apache-ant-1.8.2"
+export PATH="$ANT_HOME/bin:$PATH"
+
+
+
+
