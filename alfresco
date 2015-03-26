@@ -1,0 +1,164 @@
+一、安装
+
+1. 安装JDK、Tomcat7、mysql，配好环境变量
+2. 配置好Tomcat7相关目录结构和文件
+	1）在TOMCAT_HOME下手动建立一个放置共享文件的文件夹：文件夹最好用自动安装时的默认名字：shared，并建立下面两个子文件夹：shared/classes，shared/lib
+	2）在conf/catalina.properties中更改shared.loader=${catalina.base}/shared/classes
+	3）在Tomcat的全局lib/中放置mysql的驱动jar包
+	4）更改server.xml。将8080的connector增加两个配置：URIEncoding="UTF-8"（默认ISO-8859-1） maxHttpHeaderSize="32768"（默认8k）
+	5）如果Tomcat的ssl功能开启，IE7、8使用https从Tomcat中下载文件时会报错。需要在/conf/context.xml的context元素中增加一行：
+		<Valve className="org.apache.catalina.authenticator.SSLAuthenticator" securePagesWithPragma="false" />
+		
+3. 安装Alfresco WARs
+	1）将zip包中bin/以及web-server/下的四个文件夹copy到TOMCAT_HOME下，合并相同内容。并将web-server/下的lib/copy到shared下；其中包括将web-server/webapps/下的几个war包copy到TOMCAT_HOME/webapps目录下。(如果用mysql，则不用copy lib/下的postgre包)
+	
+	2）根据情况编辑shared/classes/下的alfresco-global.properties.sample文件，并去掉文件名后的.sample；
+		（那为什么在2.1中还要手动建立shared/classes与shared/lib文件夹？）
+		 此文件主要用于配置DB & Email功能
+		 <extension>用于配置自己的Spring配置文件路径，用于覆盖系统自带的路径；
+		 
+	4）如果是升级alfresco，则需要运行clean_tomcat.sh来清除之前的temp文件；
+	5）安装完成后，还需要生成&安装自己的证书，不详说了。
+	
+	
+	
+	
+二、管理
+	公约：<classpathRoot>表示TOMCAT_HOME/shared/classes/路径
+1. 启动：只需要启动mysqld、Tomcat，就可以在浏览器中访问http://127.0.0.1:8080/share了。
+2. 配置alfresco-global.properties
+	1）Mysql必须使用UTF-8以及innodb
+	2）创建mysql用户名密码都为：alfresco；并创建alfresco数据库
+	3）清除<contentstore>目录（为什么？）
+	4）设置dir.root=/home/dds/srv/alfresco/alf_data  (绝对路径)
+	5）去掉以下两行的注释：
+		db.driver=org.gjt.mm.mysql.Driver
+		db.url=jdbc:mysql://${db.host}:${db.port}/${db.name}?useUnicode=yes&characterEncoding=UTF-8 
+		再修改以下设置：
+		db.name=alfresco
+		db.username=alfresco
+		db.password=alfresco
+		db.host=localhost
+		db.port=3306
+		db.pool.max=275
+		
+	6）将zip包中的alf_data/keystore/拷贝到前面设置的dir.root下
+	7）在alf_data/下创建contentstore文件夹
+	8）设置db的username大小写敏感
+	
+3. 启动tomcat&alfresco时，log报错，
+	1）提示alfresco编译版本高于环境运行版本(jdk1.6)，重新下载配置jdk1.7；
+	2）JVM堆溢出，原堆为784M，改Catalina环境变量为Xms1024,Xmx2048后成功
+	
+	
+	
+	mysql驱动要放在哪个lib下？
+	系统原始帐号密码都为admin	
+	为了定位问题，采用以下logging.properti取代alfresco/WEB-INF/classes下的logging.propertiy，以期输出更具体的error信息
+	
+	
+	alfresco初始安装的97个表：
+	+-----------------------------+
+| Tables_in_alfresco          |
++-----------------------------+
+| ACT_EVT_LOG                 |
+| ACT_GE_BYTEARRAY            |
+| ACT_GE_PROPERTY             |
+| ACT_HI_ACTINST              |
+| ACT_HI_ATTACHMENT           |
+| ACT_HI_COMMENT              |
+| ACT_HI_DETAIL               |
+| ACT_HI_IDENTITYLINK         |
+| ACT_HI_PROCINST             |
+| ACT_HI_TASKINST             |
+| ACT_HI_VARINST              |
+| ACT_ID_GROUP                |
+| ACT_ID_INFO                 |
+| ACT_ID_MEMBERSHIP           |
+| ACT_ID_USER                 |
+| ACT_RE_DEPLOYMENT           |
+| ACT_RE_MODEL                |
+| ACT_RE_PROCDEF              |
+| ACT_RU_EVENT_SUBSCR         |
+| ACT_RU_EXECUTION            |
+| ACT_RU_IDENTITYLINK         |
+| ACT_RU_JOB                  |
+| ACT_RU_TASK                 |
+| ACT_RU_VARIABLE             |
+| JBPM_ACTION                 |
+| JBPM_BYTEARRAY              |
+| JBPM_BYTEBLOCK              |
+| JBPM_COMMENT                |
+| JBPM_DECISIONCONDITIONS     |
+| JBPM_DELEGATION             |
+| JBPM_EVENT                  |
+| JBPM_EXCEPTIONHANDLER       |
+| JBPM_JOB                    |
+| JBPM_LOG                    |
+| JBPM_MODULEDEFINITION       |
+| JBPM_MODULEINSTANCE         |
+| JBPM_NODE                   |
+| JBPM_POOLEDACTOR            |
+| JBPM_PROCESSDEFINITION      |
+| JBPM_PROCESSINSTANCE        |
+| JBPM_RUNTIMEACTION          |
+| JBPM_SWIMLANE               |
+| JBPM_SWIMLANEINSTANCE       |
+| JBPM_TASK                   |
+| JBPM_TASKACTORPOOL          |
+| JBPM_TASKCONTROLLER         |
+| JBPM_TASKINSTANCE           |
+| JBPM_TOKEN                  |
+| JBPM_TOKENVARIABLEMAP       |
+| JBPM_TRANSITION             |
+| JBPM_VARIABLEACCESS         |
+| JBPM_VARIABLEINSTANCE       |
+| alf_access_control_entry    |
+| alf_access_control_list     |
+| alf_ace_context             |
+| alf_acl_change_set          |
+| alf_acl_member              |
+| alf_activity_feed           |
+| alf_activity_feed_control   |
+| alf_activity_post           |
+| alf_applied_patch           |
+| alf_audit_app               |
+| alf_audit_entry             |
+| alf_audit_model             |
+| alf_authority               |
+| alf_authority_alias         |
+| alf_child_assoc             |
+| alf_content_data            |
+| alf_content_url             |
+| alf_content_url_encryption  |
+| alf_encoding                |
+| alf_locale                  |
+| alf_lock                    |
+| alf_lock_resource           |
+| alf_mimetype                |
+| alf_namespace               |
+| alf_node                    |
+| alf_node_aspects            |
+| alf_node_assoc              |
+| alf_node_properties         |
+| alf_permission              |
+| alf_prop_class              |
+| alf_prop_date_value         |
+| alf_prop_double_value       |
+| alf_prop_link               |
+| alf_prop_root               |
+| alf_prop_serializable_value |
+| alf_prop_string_value       |
+| alf_prop_unique_ctx         |
+| alf_prop_value              |
+| alf_qname                   |
+| alf_server                  |
+| alf_store                   |
+| alf_subscriptions           |
+| alf_tenant                  |
+| alf_transaction             |
+| alf_usage_delta             |
++-----------------------------+
+97 rows in set (0.02 sec)
+
+
