@@ -999,6 +999,10 @@ GPS定位的距离参数（即locationManager.requestLocationUpdates(LocationMan
 	
 	
 	
+2015年
+3.19
+连接单位的wifi网络出错解决方法：
+因为centos有两套网络管理的工具：service networkmanager start 或者 NetworkManager两者只能二选一 ；在家用前者，在单位就要用后者，并先service networkmanager stop。
 	
 	
 	
