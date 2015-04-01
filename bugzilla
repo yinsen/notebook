@@ -1,0 +1,33 @@
+一、安装perl、mysql、apache、
+二、将bugzilla放到htdocs/下
+三、checksetup.pl --check-modules检查还要安装哪些mod，依次用install_perl安装，在root下安装
+四、下载mod_perl，编译安装
+		1. 下载解压；
+		2. cd mod_perl-2.x.x
+				perl Makefile.PL <options>
+				其中options是一个kvp值对，可以是ExtUtils::MakeMaker中的所有一般性选项。如PREFIX，LIB等。
+				perl Makefile.PL MP_APXS=/usr/local/apache2/bin/apxs
+		3. make & make install
+				mod_perl.so会自动拷贝到modules/目录下
+				
+				
+五，设置mysql的my.cnf，修改./localconfig的相关配置
+		特别的mysql的my.cnf中将sock文件改为了'/var/run/mysqld/mysqld.sock'。而如果不修改./localconfig中的相关配置的话，它会默认为'/var/lib/mysql.sock'
+
+六、创建mysql的bugs用户
+
+七、./checksetup.pl执行成功后，会自动在mysql中建立bugs数据库
+
+八、httpd.conf中的user&group要与localconfig中的group相同。并修改htdocs/权限，chmod 755
+
+九、修改httpd.conf中的AddHandler设置，让apache执行cgi文件，而不是直接返回cgi文件内容。
+			AddType application/x-httpd-php .php
+			AddHandler cgi-script .pl
+			AddHandler cgi-script .cgi
+			
+			
+十、如果更改localconfig或者httpd.conf相关配置，或者做了chmod等操作，都要重新执行checksetup.pl（相当于重新编译）
+
+
+
+七、邮件设置可以不用
