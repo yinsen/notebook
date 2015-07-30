@@ -1,0 +1,20 @@
+一、安装postfix
+
+二、配置postfix
+	参考链接：
+	http://www.postfix.org/BASIC_CONFIGURATION_README.html
+	http://www.centoscn.com/CentosServer/lighttpd/2013/0730/806.html
+	
+	1. postfix最主要的两个配置文件是 main.cf 和 master.cf ，默认在/etc/postfix目录下。这两个文件只能由root拥有，否则postfix的root权限会被别的账户拥有。任何对这两个文件的修改都需要重启postfix生效：postfix reload
+
+	2. postfix的访问权限、路径覆盖？等数据都放在数据库中了，postfix可通过配置使用各种数据库，详见DATABASE_README
+	
+	3. postfix的main.cf配置文件有几百项参数，但都有默认值，只要改其中两三项，就可以正常启动postfix了。main.cf的语法：
+			parameter = value
+			other_parameter = $parameter
+			
+			1） myorigin 参数指定外发邮件时的域名后缀，默认为邮件主机名，如：
+				myorigin = $myhostname (default: send mail as "user@$myhostname")
+    		myorigin = $mydomain   (probably desirable: "user@$mydomain")
+    		
+    	2）mydestination参数指定本地邮件域名，即发到以mydestination为域名的邮件，其实都是发到本机。

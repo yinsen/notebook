@@ -29,5 +29,20 @@
 十、如果更改localconfig或者httpd.conf相关配置，或者做了chmod等操作，都要重新执行checksetup.pl（相当于重新编译）
 
 
+十一、汉化：
+    将汉化包解压得到的文件目录 cn或者zh-TW 拷贝至 Bugzilla 的子目录 template下；刷新bugzilla页面即在右上角出现语言选择链接。
+    汉化包的具体下载你可以在http://bugzilla.org/download.html 里找到相应的bugzilla汉化包。
 
-七、邮件设置可以不用
+
+
+
+Bugzilla配置
+1. 参数设定：
+1）urlbase：bugzilla的url，用于发送邮件。
+2）cookiepath：administrator的浏览器cookie管理
+3）maintainer：bugzilla系统维护人员
+4）requirelogin：表示bugzilla是否需要登录才能看到相关信息。
+5）createemailregexp：默认值为".*"，此时所有的邮件账户都可以用于注册bugzilla帐号；如果设定为"@mycompany.com$"，则只有后缀为mycompany.com的邮箱才能注册；如果设定为空，则只能由管理员注册帐号。
+6）mail_delivery_method：使用sendmail还是SMTP方式发送邮件。
+
+
