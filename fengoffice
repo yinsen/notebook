@@ -1,0 +1,14 @@
+1.yum install gd
+yum install gd-devel
+ 
+1.编译安装php5.6，
+2. yum安装php-mysql
+
+4. 下载解压fengoffice到htdoc
+5. 更改httpd.conf，设置php，以及fengoffice相关设置
+6. 输入http://localhost/fengoffice_3.4.4.1/public/install开始安装
+
+
+
+feng的localhost主机名填的是host文件里配置的主机名，如ys-centos
+
