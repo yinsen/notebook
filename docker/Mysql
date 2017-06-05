@@ -1,0 +1,13 @@
+1.master DB:
+ 
+FLUSH TABLES WITH READ LOCK;
+SHOW MASTER STATUS;
+mysqldump -u root -p --opt -R [DBName] > DBName2017.sql
+UNLOCK TABLES;
+
+
+2.Slave DB:
+drop database [DBName]
+create database [DBName]
+source DBName2017.sql
+change master to master_host='mysql-master',master_port=3306,master_user='sync',master_password='sync',master_log_file='master-logbin.000005',master_log_pos=

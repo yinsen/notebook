@@ -1,0 +1,71 @@
+1. docker run -it --name mysql-master -e mysqld -e MYSQL_ROOT_PASSWORD='apollo' -v /home/dds/data_oa/mysql/data_master:/var/lib/mysql -v /home/dds/data_oa/mysql/conf_master/mysql.conf.d:/etc/mysql/mysql.conf.d mysql:5.6.36
+
+********************************************************************************
+不要在docker run时就创建数据库，这样会导致feng在install时重复创建，而引发feng登录后只能看到topbar的问题。
+********************************************************************************
+
+    1）设置主从备份：
+	Master数据库中赋予slave库读取log文件的权限：
+	
+  	create user dds; 
+  	GRANT ALL PRIVILEGES ON *.* TO dds;
+  	SET PASSWORD FOR dds = PASSWORD('sensen');
+
+	GRANT FILE ON *.* TO 'sync'@'%' IDENTIFIED BY 'sync';
+ 	GRANT REPLICATION SLAVE ON *.* TO 'sync'@'%';
+	FLUSH PRIVILEGES;
+
+
+
+2. docker run -it --name mysql-slave1 -e mysqld -e MYSQL_ROOT_PASSWORD='apollo' -v /home/dds/data_oa/mysql/data_slave1:/var/lib/mysql -v /home/dds/data_oa/mysql/conf_slave1/mysql.conf.d:/etc/mysql/mysql.conf.d --link mysql-master:mysqldb mysql:5.6.36
+
+
+	1）mysql>stop slave;
+
+	2)从库指定对应master的信息：
+	mysql> change master to master_host='mysql-master',master_port=3306,master_user='sync',master_password='sync',master_log_file='master-logbin.000005',master_log_pos=
+
+	3）mysql>start slave;
+
+
+
+
+3. docker run -it --name apache_centos -v /home/dds/data_oa/httpd/conf/:/usr/local/apache2/conf/ -v /home/dds/data_oa/httpd/htdocs/:/usr/local/apache2/htdocs/ -v /home/dds/data_exchange/:/mnt/data_exchange/ -p 80:80 --link mysql-master:mysqldb centos:7.3.1611_php5.6.30_apache2.2.32 /bin/bash
+
+	/usr/local/apache2/bin/apachectl start
+
+
+
+	chmod 777 /home/dds/data_oa/httpd/htdocs/test/config/
+	chmod 777 /home/dds/data_oa/httpd/htdocs/test/cache/
+	chmod 777 /home/dds/data_oa/httpd/htdocs/test/tmp/
+	chmod 777 /home/dds/data_oa/httpd/htdocs/test/upload/
+	chmod 777 /home/dds/data_oa/httpd/htdocs/office/language/
+
+
+
+
+
+
+
+
+4. rsync目的服务器
+	yum install rsync
+	Edit /etc/rsync.conf
+	在/etc/rc.d/rc.local最后添加一行"/usr/bin/rsync --daemon"
+	chmod 755 /etc/rc.d/rc.local
+
+docker run -it --name rsync_to -v /home/dds/data_oa_backup:/data_oa_to centos:7.3.1611_rsync_to /bin/bash
+/usr/bin/rsync --daemon
+
+
+5. rsync源服务器
+
+	yum install rsync
+	yum install gcc & make
+	download & make inotify
+	New /root/inotify_from.sh, 在/etc/rc.d/rc.local最后添加一行"sh /root/inotify_from.sh" ,开机自动执行
+	chmod 755 /etc/rc.d/rc.local
+
+docker run -it --name rsync_from -v /home/dds/data_oa:/data_oa_from --link rsync_to:rsync_server centos:7.3.1611_rsync_from /bin/bash
+/root/inotify_from.sh &
