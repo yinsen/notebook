@@ -1,4 +1,6 @@
 一、安装postfix
+	1. yum install postfix
+	2. yum install cyrus* (包括cyrus-imapd,cyrus-sasl等)
 
 二、配置postfix
 	参考链接：
@@ -15,6 +17,99 @@
 			
 			1） myorigin 参数指定外发邮件时的域名后缀，默认为邮件主机名，如：
 				myorigin = $myhostname (default: send mail as "user@$myhostname")
-    		myorigin = $mydomain   (probably desirable: "user@$mydomain")
-    		
-    	2）mydestination参数指定本地邮件域名，即发到以mydestination为域名的邮件，其实都是发到本机。
+		    		myorigin = $mydomain   (probably desirable: "user@$mydomain")
+		    		
+		    	2）mydestination参数指定本地邮件域名，即发到以mydestination为域名的邮件，其实都是发到本机。
+
+
+
+
+
+
+
+三、Email的基本原理与原则
+1. Internate上的邮件系统所涉及到的两个RFC为 RFC821(RFC2821) 与 RFC822(RFC2822)
+
+
+
+
+
+
+四、postfix原理
+
+   postfix所扮演的角色就是MTA.
+	1. postfix的安全由其模块化设计决定,不同的模块在不同的进程,每一个进程拥有最小化的权限.同时不需要的模块可以配置为不运行.
+	
+
+
+五.postfix配置管理
+1. postfix主要两个配置文件,位于/etc/postfix/下.
+	1)master.cf:主要配置master与其它模块的组合协作.一般默认设置即可.
+	2)main.cf:主要配置
+		myhostname(主机名+mydomain),
+		mydomain(优先级高于myhostname中的mydomain部分),
+		myorigin(本地网域,通常设定为mydomain),
+		mydestination(作为终点(本地)MTA代哪些地址收邮件,例如:mydestination=$myhostname,localhost.$mydomain,$mydomain
+
+	3)main.cf中对于kvp形式的参数值或太多的参数值,一般采用查询表的结构来组织.
+	4)限制转发服务,用mynetworks_style与mynetworks两个参数限定,因mynetworks可以定义网段(10.2.0.0/255),所以更方便点.
+
+2. 管理:
+	安装好后先运行:postfix check,如果没有产生日志,就是好消息.	
+	启动:postfix start
+	停止:postfix stop(会等当前任务完成再停止)
+	重新载入:postfix reload(会等当前任务完成再结束程序,重新读取参数,用户无感.)
+	postfix的log:/var/log/maillog
+	
+
+六 队列管理
+postfix主要提供5种队列,主要关注income,active,其它的hold,
+对于管理员,postfix提供各种队列的操作工具,包括查看,转移,删除等.
+
+
+七 DNS
+	
+	DNS服务器原本是一台中央服务器,因为互联网的发展,DNS服务器发展为一种层级结构,即每一个网域都有自己的DNS服务器,每个DNS服务器有个自己的网域数据库(BIND数据库软件),用于自主记录本网域的"资源记录".
+	postfix要搭配DNS服务器.postfix跨网域投递邮件时,必须层层向上层DNS找到目标网域,再在目标网域的DNS服务器找到此网域中的MX主机,进行投递.
+
+
+	1. DNS的网域数据由多种类型的"资源记录"组成,邮件系统主要关心以下四种:
+		1) A
+		代表"主机名称"与"IP地址"的对应关系;
+		2)CNAME
+		代表"别名"与实际提供服务的"规范主机"名称的对应关系,比如"www.163.com"为对外公布的主机别名,但它可以实际指向某一台提供服务的主机.
+		3)MX
+		代表本网域的邮件交换主机,由于处理本网域的邮件收发.
+		4)PTR
+		与A记录相反,代表"IP地址"到"主机名称"的对应关系.
+
+
+	2.设定MTA的DNS网域数据库时,必须:
+		1)包含所有主机的A记录
+		2)用上面的主机名(非别名)列出相应的邮件服务器.(因为主机名称可以灵活地对应IP地址)
+		3)确定MX的优先值.
+
+
+	3. 寄出邮件时,postfix使用系统的resolver(即DNS client,负责向本网域的DNS server查询网域信息的函数库)来取得DNS信息.收信时,你的网域DNS必须要能提供递送信息(MX记录)给外界查询,让其它MTA能够找到你的postfix server.
+	smtp MDA对DNS的访问有两次,先查MX主机,再查MX主机的IP,两步都是必须的.
+	postfix的转发只存在于备用MTA中,备用MTA定时查探到有优先级更高的MTA启动了,就将邮件都转发给它.
+
+	4. 要让postfix可以代某网域收下所有的邮件,首先要成为此网域的MX记录,另外还需要设定为可以代此网域收邮件(可设定为三种:本地网域通过mydestination设定;转发通过relay domains设定;虚拟网域...)
+
+
+
+八 POP/IMAP
+	1. 对于mydestination定义的网域的邮件,postfix会作为本地邮件将其投递到邮箱. Local MDA通常将收到的邮件投递到系统邮件存储目录: /var/spool/mail/
+	2. 邮箱格式:
+		1)mbox,每个账户的所有邮件存成一个文件,邮件之间以" FROM_"间隔;缺点是需要读写锁
+		2)maildir,每个邮件都存成一个单独的文件
+			再HOME目录下三个子目录:new/代表已收下未阅读的信(读过后放入cur/),cur/表示已阅读的信,tmp/代表正在接收的信(收完后放入new/)
+	3. .forward文件:
+		用于让用户设定自己的别名.
+
+	4. 邮箱的投递操作:
+		postfix将邮件投递到本地用户时,就是将邮件写入本地用户在系统上的邮箱.邮件的默认存储目录依具体系统而定,而默认系统之外的路径设定:
+		mbox的设置:mail_spool_directory=/var/spool/mail
+		maildir的设置:mail_spool_directory=/var/spool/mail/ (即多一个 / )
+		如果是放在HOME下,则设置home_mailbox这个参数,参数值为HOME为起点的相对路径.
+
