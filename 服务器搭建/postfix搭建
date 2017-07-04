@@ -113,3 +113,24 @@ postfix主要提供5种队列,主要关注income,active,其它的hold,
 		maildir的设置:mail_spool_directory=/var/spool/mail/ (即多一个 / )
 		如果是放在HOME下,则设置home_mailbox这个参数,参数值为HOME为起点的相对路径.
 
+	5. 对于支持mbox或maildir等传统格式的POP/IMAP server,postfix可以直接与之搭配.
+	6. 对于其它格式的POP/IMAP,则postfix约定它们之间需要使用LMTP协议进行通信. 
+		LMTP基本就是SMTP的简化版,主要区别就是:SMTP初次投递不成功时,还是会通知寄信端(smtp client)寄信成功,同时会自动暂存,自动重发;而LMTP初次投递不成功,立刻就会通知寄信端(lmtp client),发送失败,由lmtp client负责后续处理.
+	7. LMTP的更重要的作用就是可扩展性,邮件量大时,为postfix多配置几台POP/IMAP,或同时增加postfix就行了.
+
+	8. Cyrus IMAP Server(使用LMTP)
+		1) Cyrus提供两种LMTP渠道: Unix-domain socket与TCP socket, 默认是TCP socket.
+		2) postfix的LMTP投递参数定义在main.cf的transport_map中.
+		3) 在将邮件交给cyrus之前,postfix要先执行多个动作,每种LMTP的投递方式有不一样的动作:
+			a) local_transport: 不用local MDA,直接将邮件交给LMTP client发给LMTP server.
+			b) mailbox_transport: 邮件交给local MDA,根据别名文件或.forword文件找出真实的邮件地址, 再转由LMTP client发给LMTP server.
+		4) 采用local_transport或fall_transport方式时,需要将cyrus的所有用户名称写在local_recipient_maps参数所指定的一个查询表中.
+		5) postfix投递方式的具体设置方法,在main.cf中设置:
+			xxx_transport=service:socket_type[:/path/to/socket]
+
+			例如:
+			mail_transport=lmtp:unix:/var/imap/socket/lmtp
+			因socket_type默认为inet,所以用tcp socket时,设置更简单:
+			mail_transport=lmtp
+		6) cyrus使用SASL函数库来保存和验证用户身份.
+
