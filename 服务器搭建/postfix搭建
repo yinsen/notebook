@@ -23,7 +23,29 @@
 
 
 
-
+三 官网上的局域网内邮件服务器配置范例:http://www.postfix.org/STANDARD_CONFIGURATION_README.html
+	1. 场景为网内有一台主邮件服务器,几台用于分担负载的从属邮件服务器.
+	2. 收发邮件都以user@example.com的账户形式进行.但这样的话,发送给root账户及其它从属服务器的邮件都需要经由主邮件服务器处理.
+	3. 从属邮件服务器的配置:它将以user@example.com形式发送,但只负责接收到"user@hostname.example.com"的邮件.
+		1) /etc/postfix/main.cf:
+		2) myorigin = $mydomain   //表示Send mail as "user@example.com". 
+		3) mynetworks = 127.0.0.0/8 10.0.0.0/24 //Specify the trusted networks. 
+		4) relay_domains = This host does not relay mail from untrusted networks. 
+		5) # Optional: forward all non-local mail to mailhost
+		6) #relayhost = $mydomain //This is needed if no direct Internet access is available. See "Postfix behind a firewall". 
+	4. 主邮件服务器的配置
+		1) myorigin = $mydomain  //表示Send mail as "user@example.com". 
+		   
+            	   //表示本邮件服务器是整个$mydomain的邮件的接收服务器,而不仅是本主机的邮件的接收服务器.
+		2) mydestination = $myhostname localhost.$mydomain localhost $mydomain 
+		3) mynetworks = 127.0.0.0/8 10.0.0.0/24 //Specify the trusted networks.
+		4) relay_domains = //This host does not relay mail from untrusted networks. 
+		5) # Optional: forward all non-local mail to firewall 
+		6) #relayhost = [firewall.example.com]
+	5. 别名文件配置:
+		/etc/aliases:
+		    joe:    joe@joes.preferred.machine
+		    jane:   jane@janes.preferred.machine
 
 
 
@@ -73,10 +95,20 @@ postfix主要提供5种队列,主要关注income,active,其它的hold,
 	postfix要搭配DNS服务器.postfix跨网域投递邮件时,必须层层向上层DNS找到目标网域,再在目标网域的DNS服务器找到此网域中的MX主机,进行投递.
 
 	1. DNS的配置
-		1)配置/etc/named.conf,去掉IPv6行;
+		***有些文章说,需要"为/etc/sysconfig/named增加一行OPTIONS="-4",表示只支持IPv4",但实际测试好像不需要***
+		1)配置/etc/named.conf,注释掉IPv6行,注释掉"."这个zone;
 		2)配置/etc/named.rfc1912.zone,添加一个正向解析zone文件项,以及反向解析zone文件项,每个文件项都代表一个网域.(一个DNS可负责多个网域的解析)
 		3)根据第2)步中添加的文件项,在/var/named/中添加对应的"资源记录"文件;因为每个文件对应一个网域,所以里面的每条记录都是此网域内一个主机或其它资源.
-		4)在本地网域"资源记录"文件中,将根域及其它网域的项删除,这样当DNS服务器遇到非本网域的DNS资源,就会自动将其查询转发给ISP或其它DNS服务器.(DNS服务器本身的首选DNS设置为internate的DNS)
+		4)在本地网域"资源记录"文件中,将根域及其它网域的项删除,这样当DNS服务器遇到非本网域的DNS资源,就会自动将其查询转发给ISP或其它DNS服务器.(DNS服务器本身的首选DNS设置为internate的DNS,这样就会自动转发)
+
+
+		*************************************************************************
+		  经过测试,在client端,网关的设定不会影响到DNS服务器设定的效果,代理服务器则会影响.
+		  需要在代理服务器的"Ignore"选项中填写"www.si.cn"
+		*************************************************************************
+
+
+
 
 	2. 标准的资源记录具有其基本格式：[name]　　　[ttl]　　　IN　　type　　rdata
 		1) name:本网域中某条"资源记录"对应的域对象名，可以是一台单独的主机也可以是整个域。字段值："."是根域，@是默认域($ORIGIN,没有的话就是当前域,即named.conf里的zone名称).
@@ -93,12 +125,36 @@ postfix主要提供5种队列,主要关注income,active,其它的hold,
 
 
 	2. DNS的网域数据由多种类型的"资源记录"组成,主要以下七种"资源记录":
-		1)NS (每个区域文件不可或缺的记录)
-		NS记录也叫名称服务器记录，用于说明这个区域有哪些DNS服务器负责解析.
+		
+		1)SOA (每个区域文件的第一条记录,指明该区域的主DNS服务器)
+		SOA记录即起始授权机构记录,(表示此DNS主机是本域的主DNS服务器,可包含对子域DNS的授权? )指明区域名称，区域主DNS服务器, 以及该区域的其他基本属性。
+		五个字段分别为 [本地域名] [ttl省略] [IN] [SOA] [主DNS的主机名+域名 管理者邮件 其它五个参数]
+ 		例如SOA里面的管理者邮件一般应当写成：root.lalala.si.cn. 而不是root@lalala.si.cn(主要是避免使用"@") 	
 
-		2)SOA (每个区域文件不可或缺的一条记录)
-		SOA记录即起始授权机构记录. 说明哪个NS记录才是主服务器。	
-		例如SOA里面的管理者邮件一般应当写成：root.lalala.si.cn. 而不是root@rhce.qsnake.com(主要是避免使用"@") 	
+		2)NS (每个区域文件不可或缺的记录)
+		NS记录也叫名称服务器记录，用于说明这个区域有哪些DNS服务器负责解析.NS指明的都是权威DNS服务器.
+			a) 从上层DNS得到授权:
+			假設注册的domain叫abc.com, 域内有ns1与ns2兩台server。那必需先从上层的.com权威服务器授权： 
+				$ORIGIN com.
+				abc IN NS ns1.abc.com.
+				abc IN NS ns2.abc.com.
+				ns1.abc IN A 1.2.3.4
+				ns1.abc IN A 1.2.3.5
+			b) 域内自己授权
+				$ORIGIN abc.com.
+				@ IN NS ns1.abc.com.
+				@ IN NS ns2.abc.com.
+				@ IN NS ns3.abc.com. (这一条只能对本域内的DNS请求有效,外网的找不到这条记录,因为上层的DNS中没有)
+				ns1 IN A 1.2.3.4
+				ns2 IN A 1.2.3.5
+				ns3 IN A 1.2.3.6
+			c)向下级子域DNS授权
+				$ORIGIN abc.com.
+				sub1 IN NS ns1.sub1.abc.com.
+				sub1 IN NS ns2.sub1.abc.com.
+				ns1.sub1 IN A 4.3.2.1
+				ns2.sub1 IN A 4.3.2.2
+
 
 		3) A
 		代表"主机名称"与"IP地址"的对应关系;
@@ -130,40 +186,147 @@ postfix主要提供5种队列,主要关注income,active,其它的hold,
 	
 
 八 POP/IMAP
-	1. 对于mydestination定义的网域的邮件,postfix会作为本地邮件将其投递到邮箱. Local MDA通常将收到的邮件投递到系统邮件存储目录: /var/spool/mail/
-	2. 邮箱格式:
-		1)mbox,每个账户的所有邮件存成一个文件,邮件之间以" FROM_"间隔;缺点是需要读写锁
-		2)maildir,每个邮件都存成一个单独的文件
-			再HOME目录下三个子目录:new/代表已收下未阅读的信(读过后放入cur/),cur/表示已阅读的信,tmp/代表正在接收的信(收完后放入new/)
-	3. .forward文件:
-		用于让用户设定自己的别名.
 
-	4. 邮箱的投递操作:
-		postfix将邮件投递到本地用户时,就是将邮件写入本地用户在系统上的邮箱.邮件的默认存储目录依具体系统而定,而默认系统之外的路径设定:
-		mbox的设置:mail_spool_directory=/var/spool/mail
-		maildir的设置:mail_spool_directory=/var/spool/mail/ (即多一个 / )
-		如果是放在HOME下,则设置home_mailbox这个参数,参数值为HOME为起点的相对路径.
+	*****************************************************************************************************************************
 
-	5. 对于支持mbox或maildir等传统格式的POP/IMAP server,postfix可以直接与之搭配.
-	6. 对于其它格式的POP/IMAP,则postfix约定它们之间需要使用LMTP协议进行通信. 
-		LMTP基本就是SMTP的简化版,主要区别就是:SMTP初次投递不成功时,还是会通知寄信端(smtp client)寄信成功,同时会自动暂存,自动重发;而LMTP初次投递不成功,立刻就会通知寄信端(lmtp client),发送失败,由lmtp client负责后续处理.
-	7. LMTP的更重要的作用就是可扩展性,邮件量大时,为postfix多配置几台POP/IMAP,或同时增加postfix就行了.
+	可以这么理解:postfix与pop/imap之间的邮件交换,实际上就是一个进程间通信的实例.传统上采用文件交换的形式:mbox/maildir,也可以采用socket形式:LMTP.
+	在采用LMTP方式时, postfix调用lmtp client将邮件通过socket发送(投递)给lmtp server(在这里就是指Cyrus IMAP Server). 然后用户通过MUA来取信时,lmtp server 使用SASL函数库来保存和验证用户身份.
+	LMTP是一种协议, postfix采用此协议发送, cyrus采用此协议接收.
 
-	8. Cyrus IMAP Server(使用LMTP)
-		1) Cyrus提供两种LMTP渠道: Unix-domain socket与TCP socket, 默认是TCP socket.
-		2) postfix的LMTP投递参数定义在main.cf的transport_map中.
-		3) 在将邮件交给cyrus之前,postfix要先执行多个动作,每种LMTP的投递方式有不一样的动作:
+	*****************************************************************************************************************************
+
+	1. postfix通过Local MDA使用文件形式向POP/IMAP投递信件时, 通常投递到系统邮件存储目录: /var/spool/mail/
+		1) 文件形式投递的两种邮箱格式:
+			a)mbox,每个账户的所有邮件存成一个文件,邮件之间以" FROM_"间隔;缺点是需要读写锁.
+				mbox的设置:mail_spool_directory=/var/spool/mail
+				
+			b)maildir,每个邮件都存成一个单独的文件
+				再HOME目录下三个子目录:new/代表已收下未阅读的信(读过后放入cur/),cur/表示已阅读的信,tmp/代表正在接收的信(收完后放入new/)
+				maildir的设置:mail_spool_directory=/var/spool/mail/ (即多一个 / ).
+				如果是放在HOME下,则设置home_mailbox这个参数,参数值为HOME为起点的相对路径.
+		2) mbox或maildir等传统格式的POP/IMAP server,postfix可以直接与之搭配.
+
+			
+
+	2. postfix通过LMTP协议向POP/IMAP投递邮件, 以下主要以Cyrus IMAP Server作为IMAP说明.
+		LMTP基本就是SMTP的简化版,主要区别就是:SMTP初次投递不成功时,还是会通知寄信端(smtp client)寄信成功,同时会自动暂存,自动重发;而LMTP初次投递不成功,立刻就会通知寄信端(lmtp client),发送失败,由lmtp client负责后续处理. LMTP的更重要的作用就是可扩展性,邮件量大时,为postfix多配置几台POP/IMAP,或同时增加postfix就行了.
+		1) 与Cyrus通信方式: Unix-domain socket与TCP socket, 默认是TCP socket.
+		2) LMTP投递方式:
 			a) local_transport: 不用local MDA,直接将邮件交给LMTP client发给LMTP server.
-			b) mailbox_transport: 邮件交给local MDA,根据别名文件或.forword文件找出真实的邮件地址, 再转由LMTP client发给LMTP server.
-		4) 采用local_transport或fall_transport方式时,需要将cyrus的所有用户名称写在local_recipient_maps参数所指定的一个查询表中.
-		5) postfix投递方式的具体设置方法,在main.cf中设置:
+			b) fallback_transport: 类似于既要替本主机用户收信,又要为另一个IMAP server收信时用这种方式.
+			c) mailbox_transport: 邮件交给local MDA,根据别名文件或.forword文件找出真实的邮件地址, 再转由LMTP client发给LMTP server.
+		3) 采用local_transport或fall_transport方式时,需要将cyrus的所有用户名称写在local_recipient_maps参数所指定的一个查询表中,否则postfix不会为cyrus接收邮件.
+		4) cyrus使用SASL函数库来保存和验证用户身份.
+
+
+
+	3. 使用Cyrus作为IMAP时,如何配置postfix.
+		
+		1) 如何要求postfix是将邮件交给Cyrus,而不是其它. 在main.cf中设置:
 			xxx_transport=service:socket_type[:/path/to/socket]
 
 			例如:
-			mail_transport=lmtp:unix:/var/imap/socket/lmtp
+			mailbox_transport=lmtp:unix:/var/lib/imap/socket/lmtp   //第一个lmtp代表master.cf里定义的lmtp service.
 			因socket_type默认为inet,所以用tcp socket时,设置更简单:
-			mail_transport=lmtp
-		6) cyrus使用SASL函数库来保存和验证用户身份.
-		7) cyrus的配置:/etc/cyrus.conf
-			a)
+			mailbox_transport=lmtp
+			****************************************************************************
+			确定了lmtp就相当于确定了通信端口与通信协议,只要cyrus在监听此端口,就一定是发给了cyrus.
+			问题:当postfix与cyrus不在同一台机器上时,cyrus所在的IP地址如何设置?
+			****************************************************************************
+		2) 确定master.cf中的lmtp服务能将邮件投递给Cyrus IMAP Server
+
+	4. 安装及配置Cyrus
+		1) 安装cyrus相关软件,包括Cyrus SASL
+		   
+		2) 三大配置文件:
+			a)/etc/imapd.conf: 保持默认. 定义了邮件存储路径,证书路径等等.系统会根据这个文件自动在服务器上设置一个供Cyrus使用的系统账户cyrus,组mail. 自动生成邮件存储路径等等.默认/var/spool/imap/下将存储邮件文件,所以空间要够大.
+			b)/etc/cyrus.conf: 保持默认. lmtpunix参数设定了Cyrus的通信方式,要与postfix的lmtp client设定一致,都为unix或都为tcp.
+			c)/etc/sysconfig/cyrus-imapd: 保持默认.
+
+		3) 在Cyrus SASL数据库中建立所有邮件用户的账户信息.
+
+	
+
+
+
+九 SASL机制
+	SASL是一种独立的,通用的,用于C/S之间验证身份的方法. postfix,cyrus都可以用这种方法来对用户进行身份验证.
+
+	(一) postfix使用SASL来验证用户
+	如果没有SASL,那postfix只能通过发件人的IP来判断,这样不准确且无法应对使用者外出的情况.
+	1. RFC2554制定了SMTP使用SASL协议来验证客户端身份的规范.postfix通过编译时包含进去的cyrus SASL函数库实现SASL协议功能.
+	2. 在SASL中,postfix既要实现当client端提供证书的功能,又要实现当server端时验证对方证书的功能.
+	3. SASL协议内的密码交换是以明文进行,所以需要TLS(前身为ssl)为其提供加密传输服务.
+	4. MUA也必须正确设置,正确送出其身份信息至postfix.
+
+
+	(三)SASL介绍
+	5. SASL验证机制:C/S之间的传输编码及应答流程.C/S两端都会列出多种机制,实际连接时会一个个尝试,匹配出共同的机制后,就启动对应验证流程.
+	   为应对用户使用多种不同验证机制的MUA, SASL函数库最好能同时支持多种验证机制.
+	   常用验证机制:
+		1)PLAIN
+		
+	6. SASL验证架构:Server端如何存储及使用证书进行验证.
+	   常用架构:
+		1)PAM/shadow:SMTP用户都是系统用户,证书存在于/etc/passwd或/etc/shadow. 
+		2)如果SMTP账户不是系统账户,而是虚账户,证书应该放数据库中,并设置SASL与POP/IMAP Server从数据库读取证书.
+
+
+
+
+	5. 配置SASL
+		1) /etc/sysconfig/saslauthd:#MECH=pam 改成 MECH=shadow
+		2) /etc/sasl2/smtpd.conf,增加:
+			log_level: 3       
+			saslauthd_path:/var/run/saslauthd/mux 	//设置smtp寻找cyrus-sasl的路径	
+
+
+
+
+
+十．用户信箱管理
+	1. 为Cyrus-IMAP管理员账户cyrus设置密码(账户在安装时默认已创建)
+		passwd cyrus 
+	
+	2. 信箱格式: user.mis9983106(收件箱)、user.mis9983106.Sent（发件箱）、user.mis9983106.Trash（垃圾箱）和user.mis9983106.Drafts（草稿箱）
+	3. 使用/usr/bin/下的cyradm管理工具为用户创建邮件信箱.
+		1)登录管理工具:/usr/bin/cyradm -u cyrus localhost --auth plain
+
+		2)创建邮箱createmailbox: 
+			createmailbox user.mis9983106
+			createmailbox user.mis9983106.Send
+			createmailbox user.mis9983106.Trash
+			createmailbox user.mis9983106.Drafts
+		3)显示已有邮箱:listmailbox
+		4)设置邮箱空间:setquota user.mis9983106 5210   //单位为KB
+		5)显示邮箱空间:listquota
+		6)邮箱六大权限:
+			无任何权限				none
+			允许读取信箱的内容				read
+			允许读取和向信箱中张贴信息（如发邮件）	post
+			允许读取和向信箱中张贴与插入信息		append
+			除具有append权限外，还具有在信箱中删除邮件的权限，但不具有变更信箱的权限	write
+			具有所有权限				all
+		7)删除邮箱:
+			为防止误删,需要先为管理员自己赋予权限:setacl user.mis9983106 cyrus all,检查结果:listacl user.mis9983106
+			删除邮箱:deletemailbox user.mis9983106 
+
+		8)各命令缩写:
+			listmailbox	lm	列出与给定字符串相匹配的所有邮件信箱的名称
+			createmailbox	cm	创建一个新的邮件信箱
+			deletemailbox	dm	删除一个邮件信箱及其下层的所有文件夹
+			renamemailbox	renm	为邮件信箱更名
+			setaclmailbox	sam	为邮件信箱设置用户的访问权限
+			deleteaclmailbox dam	删除用户访问邮件信箱的部分或全部权限
+			listaclmailbox	lam	列出邮件信箱的访问权限列表
+			setquota	sq	为邮件信箱设置配额
+			listquota	lq	列出邮件信箱的配额
+
+			
+	4. 邮箱总体使用情况查看:su -l cyrus -c /usr/lib/cyrus-imapd/quota
+
+
+
+	
+
 
