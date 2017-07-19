@@ -1,29 +1,66 @@
-一、安装postfix
+一、安装启动postfix
 	1. yum install postfix
 	2. yum install cyrus* (包括cyrus-imapd,cyrus-sasl等)
+	3. 安装好后先运行: postfix check,如果没有产生日志,就是好消息.	
+	4. 启动:postfix start
+	5. 停止:postfix stop(会等当前任务完成再停止)
+	6. 重新载入:postfix reload(会等当前任务完成再结束程序,重新读取参数,用户无感.)
+	7. postfix的log:/var/log/maillog
 
-二、配置postfix
+二、使用postfix
+		
+三、postfix原理
+	1. Internate上的邮件系统所涉及到的两个RFC为 RFC821(RFC2821) 与 RFC822(RFC2822)
+   	2. postfix所扮演的角色就是MTA.
+	3. postfix的安全由其模块化设计决定,不同的模块在不同的进程,每一个进程拥有最小化的权限.同时不需要的模块可以配置为不运行.
+	4. 队列管理
+		1) postfix主要提供5种队列,主要关注income,active,其它的hold,
+		2) 对于管理员,postfix提供各种队列的操作工具,包括查看,转移,删除等.
+
+
+四、配置postfix
 	参考链接：
 	http://www.postfix.org/BASIC_CONFIGURATION_README.html
 	http://www.centoscn.com/CentosServer/lighttpd/2013/0730/806.html
 	
-	1. postfix最主要的两个配置文件是 main.cf 和 master.cf ，默认在/etc/postfix目录下。这两个文件只能由root拥有，否则postfix的root权限会被别的账户拥有。任何对这两个文件的修改都需要重启postfix生效：postfix reload
+	(一)postfix配置
+	1. postfix主要两个配置文件,位于/etc/postfix/下.这两个文件只能由root拥有.
+		1)master.cf:主要配置master与其它模块的组合协作.一般默认设置即可.
+		2)main.cf:都有默认项,主要修改以下几项:
+			a) myhostname(主机名+mydomain),
+			b) mydomain(优先级高于myhostname中的mydomain部分),
+			c) myorigin(本地网域,通常设定为mydomain),
+			d) mydestination(作为终点(本地)MTA代哪些地址收邮件,例如:mydestination=$myhostname,localhost.$mydomain,$mydomain
+			e) mynetworks = 192.168.0.0/24, 10.0.0.0/8
+			f) inet_interfaces = all
+			g) relay_domains = $mydestination
+			h) local_recipient_maps = unix:passwd.byname $alias_maps
 
-	2. postfix的访问权限、路径覆盖？等数据都放在数据库中了，postfix可通过配置使用各种数据库，详见DATABASE_README
-	
-	3. postfix的main.cf配置文件有几百项参数，但都有默认值，只要改其中两三项，就可以正常启动postfix了。main.cf的语法：
-			parameter = value
-			other_parameter = $parameter
-			
-			1） myorigin 参数指定外发邮件时的域名后缀，默认为邮件主机名，如：
-				myorigin = $myhostname (default: send mail as "user@$myhostname")
-		    		myorigin = $mydomain   (probably desirable: "user@$mydomain")
-		    		
-		    	2）mydestination参数指定本地邮件域名，即发到以mydestination为域名的邮件，其实都是发到本机。
+			另外, 在main.cf文件的底部加上以下几项:
+			a) smtpd_sasl_auth_enable = yes     //使用SMTP认证
+			b) broken_sasl_auth_clients = yes   //让不支持RFC2554的smtpclient也可以跟postfix做交互。
+			c) smtpd_sasl_local_domain = $myhostname  // 指定SMTP认证的本地域名
+			d) smtpd_sasl_security_options = noanonymous //取消匿名登陆方式
+			e) smtpd_recipient_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination //设定邮件中有关收件人部分的限制
+			f) smtpd_sasl_security_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination //设置允许范围
+			g) message_size_limit = 15728640     //邮件大小
+			h) mailbox_transport=lmtp:unix:/var/lib/imap/socket/lmtp   //设置连接cyrus-imapd的路径
+		
+		语法为:parameter = value
+		      other_parameter = $parameter
+		
+		3)邮件过滤(用于反垃圾邮件): smtpd_*_restrictions用于定义一个过滤规则,里面的每个值都是一个过滤条件.任何一个过滤条件都可以放在任何一个过滤规则中.
+			a) postfix在处理邮件时,会依序检查每一个过滤规则中的每一个过滤条件,检查结果为OK,REJECT,DUNNO三选一.
+			b) 一个过滤规则中,如果有一个过滤条件检查结果为OK,则这个过滤规则通过,立刻检查下一个规则.
+			c) 任何一个过滤规则中,如果有某个过滤条件检查结果为REJECT,则不用再检查下一个规则,立刻拒收邮件.
+			d) 如果所有过滤规则的过滤条件都检查完毕,没有REJECT,则默认收下邮件.
+		4)main.cf中对于kvp形式的参数值或太多的参数值,一般采用查询表的结构来组织.
+		5)限制转发服务,用mynetworks_style与mynetworks两个参数限定,因mynetworks可以定义网段(10.2.0.0/255),所以更方便点.
+
+	2. 配置好以后,通过postconf命令查看实际的配置值.
 
 
-
-三 官网上的局域网内邮件服务器配置范例:http://www.postfix.org/STANDARD_CONFIGURATION_README.html
+	(二) postfix官网上配置文件范例(局域网内邮件服务器配置范例:http://www.postfix.org/STANDARD_CONFIGURATION_README.html)
 	1. 场景为网内有一台主邮件服务器,几台用于分担负载的从属邮件服务器.
 	2. 收发邮件都以user@example.com的账户形式进行.但这样的话,发送给root账户及其它从属服务器的邮件都需要经由主邮件服务器处理.
 	3. 从属邮件服务器的配置:它将以user@example.com形式发送,但只负责接收到"user@hostname.example.com"的邮件.
@@ -47,146 +84,15 @@
 		    joe:    joe@joes.preferred.machine
 		    jane:   jane@janes.preferred.machine
 
-
-
-三、Email的基本原理与原则
-1. Internate上的邮件系统所涉及到的两个RFC为 RFC821(RFC2821) 与 RFC822(RFC2822)
-
-
-
-
-
-
-四、postfix原理
-
-   postfix所扮演的角色就是MTA.
-	1. postfix的安全由其模块化设计决定,不同的模块在不同的进程,每一个进程拥有最小化的权限.同时不需要的模块可以配置为不运行.
-	
-
-
-五.postfix配置管理
-1. postfix主要两个配置文件,位于/etc/postfix/下.
-	1)master.cf:主要配置master与其它模块的组合协作.一般默认设置即可.
-	2)main.cf:主要配置
-		myhostname(主机名+mydomain),
-		mydomain(优先级高于myhostname中的mydomain部分),
-		myorigin(本地网域,通常设定为mydomain),
-		mydestination(作为终点(本地)MTA代哪些地址收邮件,例如:mydestination=$myhostname,localhost.$mydomain,$mydomain
-
-	3)main.cf中对于kvp形式的参数值或太多的参数值,一般采用查询表的结构来组织.
-	4)限制转发服务,用mynetworks_style与mynetworks两个参数限定,因mynetworks可以定义网段(10.2.0.0/255),所以更方便点.
-
-2. 管理:
-	安装好后先运行:postfix check,如果没有产生日志,就是好消息.	
-	启动:postfix start
-	停止:postfix stop(会等当前任务完成再停止)
-	重新载入:postfix reload(会等当前任务完成再结束程序,重新读取参数,用户无感.)
-	postfix的log:/var/log/maillog
-	
-
-六 队列管理
-postfix主要提供5种队列,主要关注income,active,其它的hold,
-对于管理员,postfix提供各种队列的操作工具,包括查看,转移,删除等.
-
-
-七 DNS
-	
-	DNS服务器原本是一台中央服务器,因为互联网的发展,DNS服务器发展为一种层级结构,即每一个网域都有自己的DNS服务器,每个DNS服务器有个自己的网域数据库(BIND数据库软件),用于自主记录本网域的"资源记录".
-	postfix要搭配DNS服务器.postfix跨网域投递邮件时,必须层层向上层DNS找到目标网域,再在目标网域的DNS服务器找到此网域中的MX主机,进行投递.
-
-	1. DNS的配置
-		***有些文章说,需要"为/etc/sysconfig/named增加一行OPTIONS="-4",表示只支持IPv4",但实际测试好像不需要***
-		1)配置/etc/named.conf,注释掉IPv6行,注释掉"."这个zone;
-		2)配置/etc/named.rfc1912.zone,添加一个正向解析zone文件项,以及反向解析zone文件项,每个文件项都代表一个网域.(一个DNS可负责多个网域的解析)
-		3)根据第2)步中添加的文件项,在/var/named/中添加对应的"资源记录"文件;因为每个文件对应一个网域,所以里面的每条记录都是此网域内一个主机或其它资源.
-		4)在本地网域"资源记录"文件中,将根域及其它网域的项删除,这样当DNS服务器遇到非本网域的DNS资源,就会自动将其查询转发给ISP或其它DNS服务器.(DNS服务器本身的首选DNS设置为internate的DNS,这样就会自动转发)
-
-
-		*************************************************************************
-		  经过测试,在client端,网关的设定不会影响到DNS服务器设定的效果,代理服务器则会影响.
-		  需要在代理服务器的"Ignore"选项中填写"www.si.cn"
-		*************************************************************************
-
-
-
-
-	2. 标准的资源记录具有其基本格式：[name]　　　[ttl]　　　IN　　type　　rdata
-		1) name:本网域中某条"资源记录"对应的域对象名，可以是一台单独的主机也可以是整个域。字段值："."是根域，@是默认域($ORIGIN,没有的话就是当前域,即named.conf里的zone名称).
-		书写规范为:要以"."结束(表示根域对象,类似于绝对路径),否则在解析时会自动在后面加上"@"(表示本域对象,类似于相对路径),例如:
-			a)www IN CNAME lalala 等于 www.si.cn. IN CNAME lalala.si.cn.
-			b)10 IN PTR lalala.si.cn. 等于 10.10.168.192.in-arpa. IN PTR lalala.si.cn. (PTR 资源项只能在反向解析区域文件中.)
-
-		2) ttl：生存时间字段，它以秒为单位定义该资源记录中的信息存放在DNS缓存中的时间长度。通常此字段值为空，表示采用SOA记录中的最小TTL值(即1小时)。
-		3) IN：此字段用于将当前湖泊记录标识为一个INTERNET的DNS资源记录。
-		4) TYPE：类型字段，用于标识当前资源记录的类型。
-		5) radata: 数据字段用于指定与当前资源记录有关的数据，数据字段的内容取决于类型字段。
-		
-		注释符号为";"
-
-
-	2. DNS的网域数据由多种类型的"资源记录"组成,主要以下七种"资源记录":
-		
-		1)SOA (每个区域文件的第一条记录,指明该区域的主DNS服务器)
-		SOA记录即起始授权机构记录,(表示此DNS主机是本域的主DNS服务器,可包含对子域DNS的授权? )指明区域名称，区域主DNS服务器, 以及该区域的其他基本属性。
-		五个字段分别为 [本地域名] [ttl省略] [IN] [SOA] [主DNS的主机名+域名 管理者邮件 其它五个参数]
- 		例如SOA里面的管理者邮件一般应当写成：root.lalala.si.cn. 而不是root@lalala.si.cn(主要是避免使用"@") 	
-
-		2)NS (每个区域文件不可或缺的记录)
-		NS记录也叫名称服务器记录，用于说明这个区域有哪些DNS服务器负责解析.NS指明的都是权威DNS服务器.
-			a) 从上层DNS得到授权:
-			假設注册的domain叫abc.com, 域内有ns1与ns2兩台server。那必需先从上层的.com权威服务器授权： 
-				$ORIGIN com.
-				abc IN NS ns1.abc.com.
-				abc IN NS ns2.abc.com.
-				ns1.abc IN A 1.2.3.4
-				ns1.abc IN A 1.2.3.5
-			b) 域内自己授权
-				$ORIGIN abc.com.
-				@ IN NS ns1.abc.com.
-				@ IN NS ns2.abc.com.
-				@ IN NS ns3.abc.com. (这一条只能对本域内的DNS请求有效,外网的找不到这条记录,因为上层的DNS中没有)
-				ns1 IN A 1.2.3.4
-				ns2 IN A 1.2.3.5
-				ns3 IN A 1.2.3.6
-			c)向下级子域DNS授权
-				$ORIGIN abc.com.
-				sub1 IN NS ns1.sub1.abc.com.
-				sub1 IN NS ns2.sub1.abc.com.
-				ns1.sub1 IN A 4.3.2.1
-				ns2.sub1 IN A 4.3.2.2
-
-
-		3) A
-		代表"主机名称"与"IP地址"的对应关系;
-
-		4)CNAME
-		代表"别名"与实际提供服务的"规范主机"名称的对应关系,比如"www.163.com"为对外公布的主机别名,但它可以实际指向某一台提供服务的主机.
-
-		5)MX
-		代表本网域的邮件交换主机,由于处理本网域的邮件收发.
-
-		6)PTR
-		与A记录相反,代表"IP地址"到"主机名称"的对应关系.PTR记录必须放在反向解析的zone文件中.
-
-		7)SRV
-		服务器资源记录,好像是windows的域控制器需要依赖DNS的SRV记录,具体有待研究.
-
-	3.设定MTA的DNS网域数据库时,必须:
-		1)包含所有主机的A记录
-		2)用上面的主机名(非别名)列出相应的邮件服务器.(因为主机名称可以灵活地对应IP地址)
-		3)确定MX的优先值.
-
-
-	4. 寄出邮件时,postfix使用系统的resolver(即DNS client,负责向本网域的DNS server查询网域信息的函数库)来取得DNS信息.收信时,你的网域DNS必须要能提供递送信息(MX记录)给外界查询,让其它MTA能够找到你的postfix server.
-	smtp MDA对DNS的访问有两次,先查MX主机,再查MX主机的IP,两步都是必须的.
-	postfix的转发只存在于备用MTA中,备用MTA定时查探到有优先级更高的MTA启动了,就将邮件都转发给它.
-
-	5. 要让postfix可以代某网域收下所有的邮件,首先要成为此网域的MX记录,另外还需要设定为可以代此网域收邮件(可设定为三种:本地网域通过mydestination设定;转发通过relay domains设定;虚拟网域...)
-
-	
+	(三) postfix操作维护:
+	postfix的命令工具都在/usr/sbin/下.
+	1. postconf 命令用来设定或查询postfix参数: postconf -e 表示编辑参数, postconf -a 表示查询用户验证机制, postconf -m 查看查询表的数据库格式等.
+	2. 
 
 八 POP/IMAP
-
+	
+	(一) IMAP原理与Cyrus介绍
+	
 	*****************************************************************************************************************************
 
 	可以这么理解:postfix与pop/imap之间的邮件交换,实际上就是一个进程间通信的实例.传统上采用文件交换的形式:mbox/maildir,也可以采用socket形式:LMTP.
@@ -246,45 +152,8 @@ postfix主要提供5种队列,主要关注income,active,其它的hold,
 		3) 在Cyrus SASL数据库中建立所有邮件用户的账户信息.
 
 	
+	(二)使用cyradm工具管理Cyrus-IMAP的用户信箱
 
-
-
-九 SASL机制
-	SASL是一种独立的,通用的,用于C/S之间验证身份的方法. postfix,cyrus都可以用这种方法来对用户进行身份验证.
-
-	(一) postfix使用SASL来验证用户
-	如果没有SASL,那postfix只能通过发件人的IP来判断,这样不准确且无法应对使用者外出的情况.
-	1. RFC2554制定了SMTP使用SASL协议来验证客户端身份的规范.postfix通过编译时包含进去的cyrus SASL函数库实现SASL协议功能.
-	2. 在SASL中,postfix既要实现当client端提供证书的功能,又要实现当server端时验证对方证书的功能.
-	3. SASL协议内的密码交换是以明文进行,所以需要TLS(前身为ssl)为其提供加密传输服务.
-	4. MUA也必须正确设置,正确送出其身份信息至postfix.
-
-
-	(三)SASL介绍
-	5. SASL验证机制:C/S之间的传输编码及应答流程.C/S两端都会列出多种机制,实际连接时会一个个尝试,匹配出共同的机制后,就启动对应验证流程.
-	   为应对用户使用多种不同验证机制的MUA, SASL函数库最好能同时支持多种验证机制.
-	   常用验证机制:
-		1)PLAIN
-		
-	6. SASL验证架构:Server端如何存储及使用证书进行验证.
-	   常用架构:
-		1)PAM/shadow:SMTP用户都是系统用户,证书存在于/etc/passwd或/etc/shadow. 
-		2)如果SMTP账户不是系统账户,而是虚账户,证书应该放数据库中,并设置SASL与POP/IMAP Server从数据库读取证书.
-
-
-
-
-	5. 配置SASL
-		1) /etc/sysconfig/saslauthd:#MECH=pam 改成 MECH=shadow
-		2) /etc/sasl2/smtpd.conf,增加:
-			log_level: 3       
-			saslauthd_path:/var/run/saslauthd/mux 	//设置smtp寻找cyrus-sasl的路径	
-
-
-
-
-
-十．用户信箱管理
 	1. 为Cyrus-IMAP管理员账户cyrus设置密码(账户在安装时默认已创建)
 		passwd cyrus 
 	
@@ -327,6 +196,102 @@ postfix主要提供5种队列,主要关注income,active,其它的hold,
 
 
 
-	
+九 SASL及在postfix/cyrus中的应用
+	**********************************************************************
+	为什么用SASL来做验证,而不是直接用看起来更棒的TLS?因为TLS的证书管理真的很费功夫..
+	***********************************************************************
+
+	(一)SASL介绍
+	SASL是一种独立的,通用的,用于C/S之间验证身份的方法. postfix,cyrus都可以链接SASL库来实现对用户进行身份验证.
+	SASL总体上是机制与策略(框架)分离的设计模式,只是SASL的机制也有多种,设定时需要同时选择机制与框架的组合:
+	1. SASL验证机制:C/S之间的传输编码及应答流程.C/S两端都会列出多种机制,实际连接时会一个个尝试,匹配出共同的机制后,就启动对应验证流程.
+	   为应对用户使用多种不同验证机制的MUA, SASL函数库最好能同时支持多种验证机制(编译时指定要包含哪些验证机制).
+	   常用机制: 如: 
+		1)PLAIN:明文交换用户名密码,需配合TLS使用.
+		2)LOGIN:基本与PLAIN相同,主要为了支持outlook等老的MUA.
+		3)pam:
+		4)shadow:
+		5)kerberos5:
+		...
+
+	   可用saslauthd -v查询当前支持的验证机制.
+		
+	2. SASL验证框架:Server端如何存储及使用证书进行验证.
+	   常用框架:
+		1)Linux系统密码:SMTP用户都是系统用户,postfix需要用saslauthd来代理访问系统密码文件. 
+		2)SASL专用密码文件:SMTP账户不是系统账户,而是虚账户,证书应该放数据库文件中,并设置SASL与POP/IMAP Server从数据库文件读取证书.
+
+	3. SASL本身的配置文件
+		1) /etc/sysconfig/saslauthd:  SASL本身的配置文件, 主要包含验证机制: MECH=pam
+
+	4. SASL操作维护:
+		saslauthd -v: 显示当前主机saslauthd服务所支持(已编译进去)的认证机制:getpwent kerberos5 pam rimap shadow ldap httpform,默认为pam
+		testsaslauthd -u cyrus -p cyrus 
+
+
+	(二) postfix使用SASL
+		RFC2554制定了SMTP使用SASL协议来验证客户端身份的规范.在SASL中,postfix既要实现当client端提供证书的功能,又要实现当server端时验证对方证书的功能.同时,MUA也必须正确设置,正确送出其身份信息至postfix.
+
+	1. 与postfix相关的SASL配置:/etc/sasl2/smtpd.conf
+		1) pwcheck_method: saslauthd	//表示采用Linux系统密码框架
+		   mech_list: plain login	//saslauthd只能采用这两种明文密码的验证机制
+		2) pwcheck_method: auxprop	//表示采用SASL专用密码文件验证框架,auxprop表示需要用外部程序来验证(默认使用sasldb)
+		   
+
+
+	2. postfix的SASL操作维护
+		1)postfix启动后,可以通过"postconf  -a" 命令来查看postfix编译时是否已经将cyrus-sasl链接进去, 正确结果为"cyrus dovecot".
+		2) 当采用auxprop验证框架时,可以用saslpasswd2工具来操作/etc/sasldb2专用密码文件:
+
+		   saslpasswd2语法需包含三项,登录名称,SASL网域名称,密码,如:
+			saslpasswd2 -c -u 'postconf -h myhostname' dkent //-c表创建用户,-u表网域
+
+
+	3. 与SASL相关的postfix配置:main.cf
+		a) smtpd_sasl_auth_enable = yes     //使用SMTP认证
+		b) broken_sasl_auth_clients = yes   //让不支持RFC2554的smtpclient也可以跟postfix做交互。
+		c) smtpd_sasl_local_domain = $myhostname  // 指定SMTP认证的本地域名
+		d) smtpd_sasl_security_options = noanonymous //取消匿名登陆方式
+		e) smtpd_recipient_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination //设定邮件中有关收件人部分的限制
+		f) smtpd_sasl_security_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination //设置允许范围
+
+
+
+
+	(三) Cyrus-IMAP使用SASL
+	1. 与cyrus相关的SASL配置:/etc/imapd.conf
+
+
+
+
+
+
+
+十 TLS
+签发给某个Server的证书大概就是证明,此证书的确是由主机名为***的服务器所拥有.
+TLS交互过程:
+1. Client发送https/STARTTLS给Server;
+2. Server向Client发送自己的证书;
+3. Client确认Server可信后,用非对称密钥技术协商对称密钥(一次性);
+4. Client与Server通过对称密钥进行通信.
+
+(一)Server端证书设定
+1. 用OpenSSL产生公私钥
+2. 将公钥及证书请求发送给CA(自建CA可免)
+3. 获得证书后将证书及私钥文件放在/etc/postfix/下.
+4. 对私钥文件chown root 并chmod 400
+
+(二)Client端证书设定
+1. 与Server端证书设定多出来一步,就是需要将公钥证书转成PKCS12格式(证书与私钥封装在一起,用一个密码保护).
+2. 将Client证书指纹存在postfix查询表中.(不懂为什么要做这个事情??)
+
+(三)postfix作为SMTP Server的TLS设定
+1. 安装OpenSSL包,用于自建CA,生成并签发证书等
+2. 为postfix打TLS补丁包,再将Server端私钥,CA根证书放在/etc/postfix/下.
+3. 在main.cf配置TLS参数,重要的例如:是否使用TLS,私钥文件路径,证书路径,CA根证书路径等参数.
+4. postfix reload
+
+(四)postfix作为SMTP client的TLS设定
+1. 客户端证书的制作与服务端完全一样,如果使用同一个证书,只要将main.cf几个TLS client参数指向TLS server参数所用的相同文件即可.
 
 
