@@ -19,31 +19,23 @@
 					mod_perl.so会自动拷贝到modules/目录下
    
 二、配置
-	1. 设置mysql的my.cnf，修改./localconfig的相关配置
-		特别的mysql的my.cnf中将sock文件改为了'/var/run/mysqld/mysqld.sock'。而如果不修改./localconfig中的相关配置的话，它会默认为'/var/lib/mysql.sock'
+	1. 修改./localconfig的相关配置
+		1)特别的mysql的my.cnf中将sock文件改为了'/var/run/mysqld/mysqld.sock'。而如果不修改./localconfig中的相关配置的话，它会默认为'/var/lib/mysql.sock'
+		2)修改./localconfig中的db_host,db_name,db_user,db_pass配置变量.
+		3)修改localconfig中的group,使其与httpd.conf中的user&group保持相同。
 
-
-三、
-	
-
-四、
-				
-				
-五，
-
-六、创建mysql的bugs用户
-
-七、./checksetup.pl执行成功后，会自动在mysql中建立bugs数据库
-
-八、httpd.conf中的user&group要与localconfig中的group相同。并修改htdocs/权限，chmod 755
-
-九、修改httpd.conf中的AddHandler设置，让apache执行cgi文件，而不是直接返回cgi文件内容。
+	2. 修改httpd.conf中的AddHandler设置，让apache执行cgi文件，而不是直接返回cgi文件内容。
 			AddType application/x-httpd-php .php
 			AddHandler cgi-script .pl
 			AddHandler cgi-script .cgi
-			
-			
-十、如果更改localconfig或者httpd.conf相关配置，或者做了chmod等操作，都要重新执行checksetup.pl（相当于重新编译）
+
+	3. 修改htdocs/权限，chmod 755
+
+	4. 如果更改localconfig或者httpd.conf相关配置，或者做了chmod等操作，都要重新执行checksetup.pl（相当于重新编译）
+
+	5. 执行./checksetup.pl,检查安装结果,如果报错,依次解决. 如果成功，会自动在mysql中建立bugs数据库,此时就可以正常使用了.
+
+
 
 
 十一、汉化：
