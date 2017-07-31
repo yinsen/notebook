@@ -1,4 +1,9 @@
-一、安装启动postfix
+
+
+
+一、mail服务器
+
+(一)安装启动postfix
 	1. yum install postfix
 	2. yum install cyrus* (包括cyrus-imapd,cyrus-sasl等)
 	3. 安装好后先运行: postfix check,如果没有产生日志,就是好消息.	
@@ -7,9 +12,36 @@
 	6. 重新载入:postfix reload(会等当前任务完成再结束程序,重新读取参数,用户无感.)
 	7. postfix的log:/var/log/maillog
 
-二、使用postfix
+(二)操作
+	1. 
+
+(三)配置
+
+	1. /etc/postfix/main.cf:	postfix配置
+	2. /etc/postfix/master.cf: 保持默认,postfix配置
+	3. /etc/sasl2/smtpd.conf: postfix的sasl配置
+
+	4. /etc/imapd.conf: 保持默认. Cyrus master进程的配置文件.详见下面说明.
+	5. /etc/cyrus.conf: 保持默认. lmtpunix参数设定了Cyrus的通信方式,要与postfix的lmtp client设定一致,都为unix或都为tcp.
+	6. /etc/sysconfig/cyrus-imapd: 保持默认.
+
+	7. /etc/sasldb2: SASL存储认证用户数据的配置数据库文件,用saslpasswd2命令操作.
 		
 三、postfix原理
+	**********************************************************************************************************
+	mail的本质就是一台主机上的某个用户(sender@10.2.128.111)向另一台主机上的某个用户(receiver@10.2.128.222)发送一段文本.
+	首先sender通过某个MUA连上sender@10.2.128.111的postfix时,要通过SASL认证此用户,然后10.2.128.111才允许sender使用sender@10.2.128.111这个帐号发送邮件.	sender@10.2.128.111这个帐户的邮件发到10.2.128.222时,10.2.128.222上的postfix在过滤规则允许(包括有receiver帐户)的情况下,接收此邮件,投递到receiver@10.2.128.222邮箱.然后, Cyrus也要通过SASL认证receiver帐户后去取邮件.
+	
+	Postfix与Cyrus都采用sasl函数库来保存和认证身份:即根据SASL的验证框架,分为系统帐户或/etc/sasldb2内帐户两种.系统帐户用linux命令创建(帐户的组为saslauth),sasldb2用saslpasswd2命令创建.Postfix采用哪种验证框架用/etc/sasl2/smtpd.conf来配置,Cyrus采用哪种验证框架用/etc/imapd.conf来配置
+
+
+	postfix实际用到的数据库类型:hash(默认),btree,unix. 
+		实际用到的数据库:/etc/postfix/sender_access.db,/etc/postfix/recipient_access.db
+	cyrus实际用到的数据库:/var/lib/imap/db: cyrusdb
+	
+	**********************************************************************************************************
+
+
 	1. Internate上的邮件系统所涉及到的两个RFC为 RFC821(RFC2821) 与 RFC822(RFC2822)
    	2. postfix所扮演的角色就是MTA.
 	3. postfix的安全由其模块化设计决定,不同的模块在不同的进程,每一个进程拥有最小化的权限.同时不需要的模块可以配置为不运行.
@@ -84,12 +116,46 @@
 		    joe:    joe@joes.preferred.machine
 		    jane:   jane@janes.preferred.machine
 
-	(三) postfix操作维护:
-	postfix的命令工具都在/usr/sbin/下.
-	1. postconf 命令用来设定或查询postfix参数: postconf -e 表示编辑参数, postconf -a 表示查询用户验证机制, postconf -m 查看查询表的数据库格式等.
-	2. 
+	(三) postfix操作维护(未缩进的为输入的命令):
+	1. 用telnet工具测试postfix:
+		telnet 10.2.128.158 25
+			Trying 10.2.128.158...
+			Connected to 10.2.128.158.
+			Escape character is '^]'.
+			220 mail.si.cn ESMTP Postfix
+		ehlo mail.si.cn
+			250-mail.si.cn
+			250-PIPELINING
+			250-SIZE 15728640
+			250-VRFY
+			250-ETRN
+			250-ENHANCEDSTATUSCODES
+			250-8BITMIME
+			250 DSN
+		auth login //(使用密码验证方式登陆）
+		cyrus //用户名（base64编码后的用户名）
+		***** //密码（base64编码后的密码）
+			235 2.7.0 Authentication successful
+		mail from:cyrus@si.cn
+			250 2.1.0 Ok
+		rcpt to:cyrus@si.cn
+			250 2.1.5 Ok
+		data
+			354 End data with <CR><LF>.<CR><LF>
+		hello postfix!!!
+		.
+			250 2.0.0 Ok: queued as AE44E4272F26
+		quit
+			221 2.0.0 Bye
+			Connection closed by foreign host.
 
-八 POP/IMAP
+	2. postfix的命令工具都在/usr/sbin/下.
+		1)postconf 命令用来设定或查询postfix参数: postconf -e 表示编辑参数, postconf -a 表示查询用户验证机制, postconf -m 查看查询表的数据库格式等.
+	
+
+
+
+八  POP/IMAP
 	
 	(一) IMAP原理与Cyrus介绍
 	
@@ -145,7 +211,7 @@
 		1) 安装cyrus相关软件,包括Cyrus SASL
 		   
 		2) 三大配置文件:
-			a)/etc/imapd.conf: 保持默认. 定义了邮件存储路径,证书路径等等.系统会根据这个文件自动在服务器上设置一个供Cyrus使用的系统账户cyrus,组mail. 自动生成邮件存储路径等等.默认/var/spool/imap/下将存储邮件文件,所以空间要够大.
+			a)/etc/imapd.conf: 保持默认. Cyrus master进程的配置文件. 定义了邮件存储路径,证书路径等等.系统会根据这个文件自动在服务器上设置一个供Cyrus使用的系统账户cyrus,组mail. 自动生成邮件存储路径等等.默认/var/spool/imap/下将存储邮件文件,所以空间要够大.
 			b)/etc/cyrus.conf: 保持默认. lmtpunix参数设定了Cyrus的通信方式,要与postfix的lmtp client设定一致,都为unix或都为tcp.
 			c)/etc/sysconfig/cyrus-imapd: 保持默认.
 
@@ -196,14 +262,31 @@
 
 
 
-九 SASL及在postfix/cyrus中的应用
+九 SASL及在postfix & cyrus中的应用
 	**********************************************************************
 	为什么用SASL来做验证,而不是直接用看起来更棒的TLS?因为TLS的证书管理真的很费功夫..
 	***********************************************************************
 
 	(一)SASL介绍
-	SASL是一种独立的,通用的,用于C/S之间验证身份的方法. postfix,cyrus都可以链接SASL库来实现对用户进行身份验证.
-	SASL总体上是机制与策略(框架)分离的设计模式,只是SASL的机制也有多种,设定时需要同时选择机制与框架的组合:
+	SASL是一种独立的,通用的,用于C/S之间验证身份的方法, postfix,cyrus都可以链接SASL库来实现对用户进行身份验证.从代码的角度来讲,SASL就是一个认证的抽象接口层,下面对应多种认证机制与框架的实际组合,上面提供接口给应用调用.如图:
+
+
+				SMTP    LDAP    XMPP   Other protocols ... 
+
+				     \       |    |      / 
+
+				      \      |    |     / 
+
+				     SASL abstraction layer 
+
+				      /      |    |     \ 
+
+				     /       |    |      \ 
+
+			      EXTERNAL   GSSAPI  PLAIN   Other mechanisms
+
+
+	SASL设定时需要同时选择机制与框架的组合:
 	1. SASL验证机制:C/S之间的传输编码及应答流程.C/S两端都会列出多种机制,实际连接时会一个个尝试,匹配出共同的机制后,就启动对应验证流程.
 	   为应对用户使用多种不同验证机制的MUA, SASL函数库最好能同时支持多种验证机制(编译时指定要包含哪些验证机制).
 	   常用机制: 如: 
@@ -219,7 +302,7 @@
 	2. SASL验证框架:Server端如何存储及使用证书进行验证.
 	   常用框架:
 		1)Linux系统密码:SMTP用户都是系统用户,postfix需要用saslauthd来代理访问系统密码文件. 
-		2)SASL专用密码文件:SMTP账户不是系统账户,而是虚账户,证书应该放数据库文件中,并设置SASL与POP/IMAP Server从数据库文件读取证书.
+		2)SASL专用密码文件:SMTP账户不是系统账户,而是虚账户,证书应该放数据库文件中(/etc/sasldb2),并设置SASL与POP/IMAP Server从数据库文件读取证书.
 
 	3. SASL本身的配置文件
 		1) /etc/sysconfig/saslauthd:  SASL本身的配置文件, 主要包含验证机制: MECH=pam
@@ -275,6 +358,7 @@ TLS交互过程:
 3. Client确认Server可信后,用非对称密钥技术协商对称密钥(一次性);
 4. Client与Server通过对称密钥进行通信.
 
+以下四块内容用一句话概括就是用OpenSSL生成公私钥及证书,放在/etc/postfix/下后,修改main.cf
 (一)Server端证书设定
 1. 用OpenSSL产生公私钥
 2. 将公钥及证书请求发送给CA(自建CA可免)
@@ -294,4 +378,30 @@ TLS交互过程:
 (四)postfix作为SMTP client的TLS设定
 1. 客户端证书的制作与服务端完全一样,如果使用同一个证书,只要将main.cf几个TLS client参数指向TLS server参数所用的相同文件即可.
 
+
+
+十一, 各个客户端的连接问题:
+   检查代理服务器是否需要,不需要则要关闭代理连接,包括FTP,Socket. Evolution还使用HTTP
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Q&A
+今天telnet发送给smtp的邮件,成功投递到了/var/spool/imap路径下的邮箱中,应该是因为main.cf中的local_recipient_maps =重新置为了默认值,而不是设为空的原因
 

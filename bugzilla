@@ -1,18 +1,35 @@
-一、安装perl、mysql、apache、
-二、将bugzilla放到htdocs/下
-三、checksetup.pl --check-modules检查还要安装哪些mod，依次用install_perl安装，在root下安装
-四、下载mod_perl，编译安装
-		1. 下载解压；
-		2. cd mod_perl-2.x.x
-				perl Makefile.PL <options>
-				其中options是一个kvp值对，可以是ExtUtils::MakeMaker中的所有一般性选项。如PREFIX，LIB等。
-				perl Makefile.PL MP_APXS=/usr/local/apache2/bin/apxs
-		3. make & make install
-				mod_perl.so会自动拷贝到modules/目录下
-				
-				
-五，设置mysql的my.cnf，修改./localconfig的相关配置
+一、安装
+	1. 安装mysql、apache
+
+	2. 安装perl
+	   	1) yum install perl 
+	  	2) yum install cpan
+		3) yum install perl-ExtUtils-Embed
+
+	3. 安装perl mod, bugzilla lib
+		1) 将bugzilla放到htdocs/下
+		2) htdocs/bugzilla/下, checksetup.pl --check-modules检查还要安装哪些mod，依次用install-module.pl安装, 或者直接 perl install-module.pl --all
+	    	3) 下载mod_perl，编译安装
+			a) 下载解压；
+			b) cd mod_perl-2.x.x
+					perl Makefile.PL <options>
+					其中options是一个kvp值对，可以是ExtUtils::MakeMaker中的所有一般性选项。如PREFIX，LIB等。
+					perl Makefile.PL MP_APXS=/usr/local/apache2/bin/apxs
+			c) make & make install
+					mod_perl.so会自动拷贝到modules/目录下
+   
+二、配置
+	1. 设置mysql的my.cnf，修改./localconfig的相关配置
 		特别的mysql的my.cnf中将sock文件改为了'/var/run/mysqld/mysqld.sock'。而如果不修改./localconfig中的相关配置的话，它会默认为'/var/lib/mysql.sock'
+
+
+三、
+	
+
+四、
+				
+				
+五，
 
 六、创建mysql的bugs用户
 
